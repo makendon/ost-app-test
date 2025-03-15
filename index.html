@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opportunity Solution Tree</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            display: flex;
+            gap: 20px;
+        }
+
+        #editor {
+            width: 500px;
+            height: 600px;
+            font-family: monospace;
+            padding: 10px;
+            white-space: pre;
+            tab-size: 2;
+            resize: both;
+            min-width: 400px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        #visualization {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            padding: 20px;
+            overflow: auto;
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tree {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            width: 100%;
+        }
+
+        .tree-level {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            gap: 30px;
+        }
+
+        .opportunity-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+            background: rgba(243, 229, 245, 0.3);
+            border-radius: 8px;
+            margin: 0 10px;
+        }
+
+        .ideas-group {
+            display: flex;
+            gap: 15px;
+            padding: 15px;
+            background: rgba(241, 248, 233, 0.3);
+            border-radius: 8px;
+        }
+
+        .assumptions-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 10px;
+            background: rgba(255, 243, 224, 0.3);
+            border-radius: 8px;
+        }
+
+        .node-content {
+            background: var(--node-color);
+            padding: 12px 16px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 250px;
+            box-sizing: border-box;
+        }
+
+        .level-0 {
+            --node-color: #e3f2fd;
+        }
+
+        .level-1 {
+            --node-color: #f3e5f5;
+        }
+
+        .level-2 {
+            --node-color: #f1f8e9;
+        }
+
+        .level-3 {
+            --node-color: #fff3e0;
+        }
+
+        .node-text {
+            flex-grow: 1;
+            font-size: 0.9em;
+        }
+
+        .node-status {
+            margin-left: 10px;
+            font-size: 1.2em;
+        }
+
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        .emoji-reference {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .emoji-item {
+            margin: 5px 0;
+            font-size: 0.9em;
+        }
+
+        .timestamp {
+            font-size: 0.8em;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <textarea id="editor" placeholder="Enter your tree structure here..."></textarea>
+        <div>
+            <button onclick="exportTree()">Export</button>
+            <div class="timestamp" id="lastSaved"></div>
+        </div>
+    </div>
+    <div id="visualization"></div>
+    
+    <div class="emoji-reference">
+        <h4>Status Emojis</h4>
+        <div class="emoji-item">🔭 :telescope: - Being explored</div>
+        <div class="emoji-item">✅ :white_check_mark: - Completed</div>
+        <div class="emoji-item">🚧 :construction: - In progress</div>
+        <div class="emoji-item">❌ :x: - Rejected</div>
+        <div class="emoji-item">💡 :bulb: - New idea</div>
+        <div class="emoji-item">❓ :question: - Needs validation</div>
+        <div class="emoji-item">🎯 :dart: - On target</div>
+        <div class="emoji-item">⭐ :star: - Priority</div>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const visualization = document.getElementById('visualization');
+        const lastSaved = document.getElementById('lastSaved');
+
+        const emojiMap = {
+            ':telescope:': '🔭',
+            ':white_check_mark:': '✅',
+            ':construction:': '🚧',
+            ':x:': '❌',
+            ':bulb:': '💡',
+            ':question:': '❓',
+            ':dart:': '🎯',
+            ':star:': '⭐'
+        };
+
+        editor.value = `Increase User Engagement :dart:
+  Improve DAU :telescope:
+    Add Gamification :star:
+      Users respond well to rewards :question:
+      Competition drives engagement :white_check_mark:
+    Implement Social Features :construction:
+      Users want to connect :bulb:
+  Enhance User Experience :star:
+    Simplified Navigation :construction:
+      Current navigation is complex :white_check_mark:`;
+
+        function getIndentationLevel(line) {
+            const match = line.match(/^( *)/);
+            return match ? match[1].length / 2 : 0;
+        }
+
+        function parseLineWithEmoji(line) {
+            let text = line.trim();
+            let emoji = '';
+            
+            for (const [code, symbol] of Object.entries(emojiMap)) {
+                if (text.endsWith(code)) {
+                    text = text.substring(0, text.lastIndexOf(code)).trim();
+                    emoji = symbol;
+                    break;
+                }
+            }
+            
+            return { text, emoji };
+        }
+
+        function buildTreeStructure(lines) {
+            let tree = null;
+            let currentLevelNodes = {};
+            let prevLevel = -1;
+
+            lines.forEach(line => {
+                if (!line.trim()) return;
+
+                const level = getIndentationLevel(line);
+                const { text, emoji } = parseLineWithEmoji(line);
+                const node = { text, emoji, level, children: [] };
+
+                if (level === 0) {
+                    tree = node;
+                    currentLevelNodes[0] = node;
+                } else {
+                    const parent = currentLevelNodes[level - 1];
+                    if (parent) {
+                        parent.children.push(node);
+                    }
+                }
+                currentLevelNodes[level] = node;
+                prevLevel = level;
+            });
+
+            return tree;
+        }
+
+        function renderNode(node) {
+            return `
+                <div class="node-content level-${node.level}">
+                    <span class="node-text">${node.text}</span>
+                    <span class="node-status">${node.emoji}</span>
+                </div>
+            `;
+        }
+
+        function renderAssumptions(assumptions) {
+            if (!assumptions.length) return '';
+            return `
+                <div class="assumptions-group">
+                    ${assumptions.map(assumption => renderNode(assumption)).join('')}
+                </div>
+            `;
+        }
+
+        function renderIdeas(ideas) {
+            if (!ideas.length) return '';
+            return `
+                <div class="ideas-group">
+                    ${ideas.map(idea => `
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            ${renderNode(idea)}
+                            ${renderAssumptions(idea.children)}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderOpportunities(opportunities) {
+            return opportunities.map(opportunity => `
+                <div class="opportunity-group">
+                    ${renderNode(opportunity)}
+                    ${renderIdeas(opportunity.children)}
+                </div>
+            `).join('');
+        }
+
+        function updateVisualization() {
+            const lines = editor.value.split('\n');
+            const tree = buildTreeStructure(lines);
+            
+            if (!tree) return;
+
+            const html = `
+                <div class="tree">
+                    <div class="tree-level">
+                        ${renderNode(tree)}
+                    </div>
+                    <div class="tree-level">
+                        ${renderOpportunities(tree.children)}
+                    </div>
+                </div>
+            `;
+            
+            visualization.innerHTML = html;
+            
+            const now = new Date('2025-03-15T16:19:33Z');
+            lastSaved.textContent = `Last updated: ${now.toISOString().replace('T', ' ').substring(0, 19)} UTC`;
+        }
+
+        function exportTree() {
+            const blob = new Blob([editor.value], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'opportunity-tree.txt';
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        editor.addEventListener('input', updateVisualization);
+        updateVisualization();
+    </script>
+</body>
+</html>
